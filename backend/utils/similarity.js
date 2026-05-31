@@ -1,3 +1,19 @@
+const synonymGroups = [
+  ['produce', 'produc', 'creat', 'make', 'generat', 'output'],
+  ['image', 'imag', 'pictur', 'photo', 'graphic', 'draw'],
+  ['copy', 'print', 'duplicat', 'reproduct'],
+  ['device', 'devic', 'tool', 'machin', 'instrument'],
+  ['information', 'informat', 'data', 'content', 'text'],
+]
+
+const synonymMap = {}
+for (const group of synonymGroups) {
+  const root = group[0]
+  for (const val of group) {
+    synonymMap[val] = root
+  }
+}
+
 function normalizeText(s) {
   return String(s || '').toLowerCase().replace(/\u00A0|\s+/g, ' ').replace(/[^a-z0-9 ]+/g, '').trim()
 }
@@ -41,7 +57,8 @@ function tokenizeAndStem(s) {
   const stem = t => {
     if (t.length <= 3) return t
     // crude stemming
-    return t.replace(/(ing|ed|ly|es|s)$/, '')
+    const stemmed = t.replace(/(ing|ed|ly|es|s)$/, '')
+    return synonymMap[stemmed] || synonymMap[t] || stemmed
   }
   return toks.map(t => stem(t)).filter(t => !stopwords.has(t))
 }

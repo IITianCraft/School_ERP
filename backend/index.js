@@ -143,6 +143,9 @@ const cors = require('cors')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const mongoose = require('mongoose')
+const helmet = require('helmet')
+const morgan = require('morgan')
+const rateLimit = require('express-rate-limit')
 const User = require('./models/User')
 const Complaint = require('./models/Complaint')
 const Event = require('./models/Event')
@@ -198,6 +201,13 @@ if (!MONGODB_URI) {
   console.error('MONGODB_URI not set. Please set MONGODB_URI in your environment or .env (no hardcoded defaults).')
   process.exit(1)
 }
+const JWT_SECRET = process.env.JWT_SECRET
+if (process.env.NODE_ENV === 'production') {
+  if (!JWT_SECRET || JWT_SECRET === 'change-this-secret') {
+    console.error('FATAL ERROR: JWT_SECRET is missing or set to insecure default "change-this-secret" in production. Exiting process.')
+    process.exit(1)
+  }
+}
 const FRONTEND_DIST = process.env.FRONTEND_DIST || path.join(__dirname, '..', 'frontend', 'dist')
 // Try to setup Razorpay if env provided (optional)
 let Razorpay = null
@@ -250,6 +260,44 @@ let corsOptions = undefined
 app.use(cors(corsOptions))
 // When running behind a proxy (Render, etc.) enable trust proxy so req.ip and secure checks work correctly
 app.set('trust proxy', true)
+
+// Production-grade security headers
+app.use(helmet({
+  contentSecurityPolicy: false,
+}))
+app.disable('x-powered-by')
+
+// Request logging using morgan
+if (process.env.NODE_ENV === 'production') {
+  app.use(morgan('combined'))
+} else {
+  app.use(morgan('dev'))
+}
+
+// Rate Limiting setup
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // Limit each IP to 300 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests from this IP, please try again after 15 minutes.' }
+})
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // Limit each IP to 30 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many login attempts from this IP, please try again after 15 minutes.' }
+})
+
+app.use('/api/login', authLimiter)
+app.use('/api', (req, res, next) => {
+  // Exclude SSE Stream endpoint to keep connections open
+  if (req.path === '/notifications/stream') return next()
+  return apiLimiter(req, res, next)
+})
+
 // Configure body parsers with an increased, configurable limit to prevent
 // "PayloadTooLargeError: request entity too large" on large JSON payloads.
 app.use(express.json({ limit: JSON_BODY_LIMIT }))
@@ -2249,10 +2297,30 @@ function makeId(prefix = '') {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}`
 }
 
+// Register Mongoose connection event listeners
+mongoose.connection.on('error', (err) => {
+  console.error('Mongoose default connection error:', err)
+})
+mongoose.connection.on('disconnected', () => {
+  console.warn('Mongoose default connection disconnected')
+  dbConnected = false
+})
+mongoose.connection.on('connected', () => {
+  console.log('Mongoose default connection connected')
+  dbConnected = true
+})
+
 async function connectDb() {
   if (!MONGODB_URI) return
+  const isProd = process.env.NODE_ENV === 'production'
+  const options = {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    socketTimeoutMS: 45000,          // Close sockets after 45s of inactivity
+  }
   try {
-    await mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    await mongoose.connect(MONGODB_URI, options)
     dbConnected = true
     console.log('Connected to MongoDB')
 
@@ -2327,14 +2395,18 @@ async function connectDb() {
     }
   } catch (err) {
     console.error('Failed to connect to MongoDB:', err.message)
+    dbConnected = false
+    if (isProd) {
+      console.error('FATAL ERROR: MongoDB connection failed in production. Exiting process.')
+      process.exit(1)
+    }
     // Common issue on Windows: `localhost` may resolve to IPv6 ::1 while mongod is listening on 127.0.0.1.
     // If the URI uses localhost, try again with 127.0.0.1 (IPv4) as a fallback.
-    dbConnected = false
     try {
       if (MONGODB_URI.includes('localhost')) {
         const alt = MONGODB_URI.replace('localhost', '127.0.0.1')
         console.log('Retrying MongoDB connection using', alt)
-        await mongoose.connect(alt, { useNewUrlParser: true, useUnifiedTopology: true })
+        await mongoose.connect(alt, options)
         dbConnected = true
         console.log('Connected to MongoDB (via 127.0.0.1)')
       }
@@ -9029,7 +9101,7 @@ app.get('*', (req, res, next) => {
   return res.status(404).json({ message: 'Not found' })
 })
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`ERP backend listening on http://localhost:${PORT}`)
 });
 
@@ -9118,4 +9190,51 @@ app.get('/api/attendance/faculty/export', verifyToken, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
     return res.send(csv)
   } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+
+// Global error handling middleware (must be registered after all routes)
+app.use((err, req, res, next) => {
+  console.error('Unhandled Server Error:', err)
+  const isProd = process.env.NODE_ENV === 'production'
+  return res.status(err.status || 500).json({
+    message: isProd ? 'Internal Server Error' : err.message,
+    error: isProd ? {} : err
+  })
+})
+
+// Graceful Shutdown implementation
+const gracefulShutdown = (signal) => {
+  console.log(`${signal} signal received: closing HTTP server`)
+  server.close(() => {
+    console.log('HTTP server closed')
+    if (mongoose.connection.readyState !== 0) {
+      mongoose.connection.close().then(() => {
+        console.log('Mongoose connection closed')
+        process.exit(0)
+      }).catch((err) => {
+        console.error('Error closing Mongoose connection:', err)
+        process.exit(1)
+      })
+    } else {
+      process.exit(0)
+    }
+  })
+  // Force exit after 10 seconds if shutdown hangs
+  setTimeout(() => {
+    console.error('Forcing shutdown due to timeout')
+    process.exit(1)
+  }, 10000)
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+
+// Catch unhandled rejections and exceptions
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+})
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception thrown:', err)
+  process.exit(1)
 })

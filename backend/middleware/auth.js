@@ -15,8 +15,12 @@ async function verifyToken(req, res, next) {
     return res.status(401).json({ message: 'Missing or invalid Authorization header' })
   }
   try {
-    const secret = process.env.JWT_SECRET || 'change-this-secret'
-    const payload = jwt.verify(token, secret)
+    const secret = process.env.JWT_SECRET
+    if (!secret && process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET must be configured in production')
+    }
+    const verifiedSecret = secret || 'change-this-secret'
+    const payload = jwt.verify(token, verifiedSecret)
 
     // attach user payload
     req.user = payload
