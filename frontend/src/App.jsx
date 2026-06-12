@@ -136,8 +136,6 @@ import StaffProfile from './pages/staff/Profile'
 import StaffCalendar from './pages/StaffCalendar'
 import StaffAttendance from './pages/StaffAttendance'
 import StaffCertificates from './pages/staff/Certificates'
-import LibraryManagement from './pages/admin/LibraryManagement'
-import BehaviorRecordsAdmin from './pages/admin/BehaviorRecords'
 import BehaviorRecordsFaculty from './pages/faculty/BehaviorRecords'
 import LessonPlan from './pages/faculty/LessonPlan'
 
