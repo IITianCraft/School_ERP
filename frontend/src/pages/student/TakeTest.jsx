@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import StudentLayout from '../../components/student/StudentLayout'
 import { getAuth } from '../../utils/session'
-import { getTestQuestions, getMyTests } from '../../api'
+import { getTestQuestions, getMyTests, API_BASE } from '../../api'
 import { useSubmitTest, useForfeitTest } from '../../hooks/useTakeTest'
 import { toast } from 'react-toastify'
 
@@ -256,7 +256,7 @@ export default function TakeTest() {
                         {q.questionImage ? (
                             <div>
                                 <img
-                                    src={`${String(q.questionImage).startsWith('http') ? q.questionImage : `${import.meta.env.VITE_API_BASE || 'http://localhost:4001'}${q.questionImage}`}`}
+                                    src={`${String(q.questionImage).startsWith('http') ? q.questionImage : `${API_BASE}${q.questionImage}`}`}
                                     alt={`Q${idx + 1}`}
                                     className="mcq-qimage"
                                 />
@@ -268,7 +268,7 @@ export default function TakeTest() {
                                 <div className="mcq-options">
                                     {q.options.map((opt, i) => {
                                         const img = (q.optionImages && q.optionImages[i]) ? q.optionImages[i] : ''
-                                        const imgUrl = img ? (String(img).startsWith('http') ? img : `${import.meta.env.VITE_API_BASE || 'http://localhost:4000'}${img}`) : ''
+                                        const imgUrl = img ? (String(img).startsWith('http') ? img : `${API_BASE}${img}`) : ''
                                         const checked = answers[q._id] === opt
                                         return (
                                             <label key={i} className={`mcq-option ${checked ? 'selected' : ''}`}>

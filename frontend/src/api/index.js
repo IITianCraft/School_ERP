@@ -83,8 +83,14 @@ export async function getMyTransportReceipts(token) {
 }
 // Default API base: use VITE_API_BASE when provided, otherwise fall back to localhost:4000 during development.
 let API_BASE = import.meta.env.VITE_API_BASE || ''
+
+// Prevent localhost API base in production (when hosted on Vercel/etc.)
+if (typeof window !== 'undefined' && window.location && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && API_BASE.includes('localhost')) {
+  API_BASE = '' // Fall back to relative path in production if env var is accidentally localhost
+}
+
 if (!API_BASE) {
-  // If running the Vite dev server (commonly on port 5173), default to backend on localhost:4000
+  // If running the Vite dev server (commonly on port 5173), default to backend on localhost:4001
   try {
     if (typeof window !== 'undefined' && window.location && String(window.location.port).includes('5173')) {
       API_BASE = 'http://localhost:4001'

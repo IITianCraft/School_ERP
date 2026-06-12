@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
-import { getTests, getTestQuestions, createTestQuestions, updateTest, deleteTest, uploadFile } from '../../api'
+import { getTests, getTestQuestions, createTestQuestions, updateTest, deleteTest, uploadFile, API_BASE } from '../../api'
 import { getAuth } from '../../utils/session'
 
 export default function ViewTestSeries() {
@@ -385,7 +385,7 @@ function ImagePicker({ value, onChange, label = 'Image (optional)' }) {
             </div>
             {preview ? (
                 <img
-                    src={`${String(preview).startsWith('http') ? preview : `${import.meta.env.VITE_API_BASE || 'http://localhost:4001'}${preview}`}`}
+                    src={`${String(preview).startsWith('http') ? preview : `${API_BASE}${preview}`}`}
                     alt="preview"
                     style={{ marginTop: 12, maxWidth: '100%', height: 'auto', maxHeight: 220, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--border)' }}
                 />
