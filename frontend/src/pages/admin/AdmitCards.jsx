@@ -3,6 +3,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import { getAuth } from '../../utils/session'
 import { createAdmitCards, getAdmitCards, API_BASE } from '../../api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'react-toastify'
 
 export default function AdminAdmitCards() {
     const { token } = getAuth()
@@ -27,7 +28,11 @@ export default function AdminAdmitCards() {
         mutationFn: (fd) => createAdmitCards(fd, token),
         onSuccess: (res) => {
             try { qc.invalidateQueries(['admitCards', token]) } catch (e) { }
-            alert(`Generated ${res.count || 0} admit cards`)
+            if (res.count === 0 || !res.filePath) {
+                toast.error('Failed to generate admit cards: No valid PDF was created.')
+            } else {
+                alert(`Generated ${res.count} admit cards`)
+            }
         },
         onError: (err) => { alert(err && err.message ? err.message : 'Failed') }
     })
@@ -46,6 +51,56 @@ export default function AdminAdmitCards() {
         fd.set('subjects', JSON.stringify(subjects || []))
         if (signatureFile) fd.set('signature', signatureFile)
         createMutation.mutate(fd)
+    }
+
+async function downloadFileById(id, filename, filePath) {
+        try {
+            if (!id) return toast.error('Invalid file')
+            const base = API_BASE || (window && window.location && window.location.origin) || ''
+            const headers = {}
+            if (token) headers['Authorization'] = `Bearer ${token}`
+
+            // If filePath is provided, try direct static file fetch first (faster, avoids route issues)
+            if (filePath) {
+                try {
+                    const normalized = String(filePath || '').startsWith('/') ? filePath : `/${filePath}`
+                    const directUrl = `${base}${normalized}`
+                    const dr = await fetch(directUrl, { credentials: 'include', headers })
+                    if (dr.ok) {
+                        const blob = await dr.blob()
+                        const link = document.createElement('a')
+                        link.href = window.URL.createObjectURL(blob)
+                        link.download = filename || (normalized.split('/').pop() || 'file.pdf')
+                        document.body.appendChild(link)
+                        link.click()
+                        link.remove()
+                        window.URL.revokeObjectURL(link.href)
+                        return
+                    }
+                } catch (e) {
+                    // continue to fallback
+                    console.warn('Direct file fetch failed, falling back to API download', e && e.message)
+                }
+            }
+
+            // Fallback to API download endpoint
+            const fetchUrl = `${base}/api/admitcards/${id}/download`
+            const res = await fetch(fetchUrl, { credentials: 'include', headers })
+            if (!res.ok) {
+                const txt = await res.text().catch(() => '')
+                throw new Error(txt || 'Failed to download file')
+            }
+            const blob = await res.blob()
+            const link = document.createElement('a')
+            link.href = window.URL.createObjectURL(blob)
+            link.download = filename || 'admit-card.pdf'
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(link.href)
+        } catch (e) {
+            toast.error(`Download failed: ${e.message || 'An error occurred'}`)
+        }
     }
 
     return (
@@ -150,53 +205,4 @@ export default function AdminAdmitCards() {
         </AdminLayout>
     )
 
-    async function downloadFileById(id, filename, filePath) {
-        try {
-            if (!id) return alert('Invalid file')
-            const base = API_BASE || (window && window.location && window.location.origin) || ''
-            const headers = {}
-            if (token) headers['Authorization'] = `Bearer ${token}`
-
-            // If filePath is provided, try direct static file fetch first (faster, avoids route issues)
-            if (filePath) {
-                try {
-                    const normalized = String(filePath || '').startsWith('/') ? filePath : `/${filePath}`
-                    const directUrl = `${base}${normalized}`
-                    const dr = await fetch(directUrl, { credentials: 'include', headers })
-                    if (dr.ok) {
-                        const blob = await dr.blob()
-                        const link = document.createElement('a')
-                        link.href = window.URL.createObjectURL(blob)
-                        link.download = filename || (normalized.split('/').pop() || 'file.pdf')
-                        document.body.appendChild(link)
-                        link.click()
-                        link.remove()
-                        window.URL.revokeObjectURL(link.href)
-                        return
-                    }
-                } catch (e) {
-                    // continue to fallback
-                    console.warn('Direct file fetch failed, falling back to API download', e && e.message)
-                }
-            }
-
-            // Fallback to API download endpoint
-            const fetchUrl = `${base}/api/admitcards/${id}/download`
-            const res = await fetch(fetchUrl, { credentials: 'include', headers })
-            if (!res.ok) {
-                const txt = await res.text().catch(() => '')
-                throw new Error(txt || 'Failed to download file')
-            }
-            const blob = await res.blob()
-            const link = document.createElement('a')
-            link.href = window.URL.createObjectURL(blob)
-            link.download = filename || 'admit-card.pdf'
-            document.body.appendChild(link)
-            link.click()
-            link.remove()
-            window.URL.revokeObjectURL(link.href)
-        } catch (e) {
-            alert(e.message || 'Download failed')
-        }
     }
-}

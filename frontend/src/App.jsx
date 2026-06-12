@@ -81,8 +81,17 @@ import FacultyProfile from './pages/faculty/Profile'
 import StudentProfile from './pages/student/Profile'
 import ParentMeeting from './pages/parent/Meeting'
 import AdminNotices from './pages/admin/Notices'
+import AdminNotifications from './pages/admin/Notifications'
+import AdminNotificationSettings from './pages/admin/NotificationSettings'
+import FrontOffice from './pages/admin/FrontOffice'
+import AdmissionEnquiry from './pages/admin/AdmissionEnquiry'
+import OnlineAdmissions from './pages/admin/OnlineAdmissions'
+import OnlineAdmission from './pages/OnlineAdmission'
+import DiscountManagement from './pages/admin/DiscountManagement'
 import AdminForm from './pages/admin/Form'
 import AdminFormQueries from './pages/admin/FormQueries'
+import LibraryManagement from './pages/admin/LibraryManagement'
+import BehaviorRecordsAdmin from './pages/admin/BehaviorRecords'
 import ContactQueries from './pages/admin/ContactQueries'
 import AnalyticsStudentRank from './pages/admin/AnalyticsStudentRank'
 import Forms from './pages/Forms'
@@ -127,6 +136,10 @@ import StaffProfile from './pages/staff/Profile'
 import StaffCalendar from './pages/StaffCalendar'
 import StaffAttendance from './pages/StaffAttendance'
 import StaffCertificates from './pages/staff/Certificates'
+import LibraryManagement from './pages/admin/LibraryManagement'
+import BehaviorRecordsAdmin from './pages/admin/BehaviorRecords'
+import BehaviorRecordsFaculty from './pages/faculty/BehaviorRecords'
+import LessonPlan from './pages/faculty/LessonPlan'
 
 function App() {
   // Listen for global logout events from other tabs
@@ -280,6 +293,9 @@ function App() {
         <Route path="/admin/admins" element={<Protected role="admin"><AdminAdmins /></Protected>} />
         <Route path="/admin/approvals" element={<Protected role="admin"><AdminApprovals /></Protected>} />
         <Route path="/admin/requests" element={<Protected role="admin"><AdminDeleteRequests /></Protected>} />
+        <Route path="/admin/library-management" element={<Protected role="admin"><LibraryManagement /></Protected>} />
+        <Route path="/admin/behavior-records" element={<Protected role="admin"><BehaviorRecordsAdmin /></Protected>} />
+        <Route path="/admin/notification-settings" element={<Protected role="admin"><AdminNotificationSettings /></Protected>} />
 
         <Route path="/faculty/profile" element={<Protected role="faculty"><FacultyProfile /></Protected>} />
         <Route path="/faculty/tests" element={<Protected role="faculty"><FacultyTests /></Protected>} />
@@ -290,6 +306,8 @@ function App() {
 
         <Route path="/" element={<Dashboard />} />
         <Route path="/faculty/notices" element={<Protected role="faculty"><FacultyNotices /></Protected>} />
+        <Route path="/faculty/behavior-records" element={<Protected role="faculty"><BehaviorRecordsFaculty /></Protected>} />
+        <Route path="/faculty/lesson-plan" element={<Protected role="faculty"><LessonPlan /></Protected>} />
       </Routes>
     </BrowserRouter>
   )

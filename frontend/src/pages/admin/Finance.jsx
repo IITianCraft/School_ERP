@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import '../../pages/AdminPanel.css'
-import { getFeeStructure, saveFeeStructure, getReceipts, deleteFeeHistory, getStudents, assignFeeToStudents } from '../../api'
+import { getFeeStructure, saveFeeStructure, getReceipts, deleteFeeHistory, getStudents, assignFeeToStudents, exportFeesExcel } from '../../api'
 import { getAuth } from '../../utils/session'
 
 export default function Finance() {
@@ -117,8 +117,17 @@ export default function Finance() {
         } catch (e) { console.error(e); alert('Failed to assign fee') }
     }
 
+    async function handleExportFees() {
+        try {
+            const { token } = getAuth()
+            await exportFeesExcel({}, token)
+        } catch (e) {
+            alert(e.message || 'Failed to export fees')
+        }
+    }
+
     return (
-        <AdminLayout title="Finance">
+        <AdminLayout title="Finance Management">
             <div className="admin-page">
                 <header className="admin-page-header">
                     <h2>Finance Management</h2>
@@ -312,7 +321,10 @@ export default function Finance() {
 
                 {tab === 'receipts' && (
                     <div className="admin-card">
-                        <h3>All Receipts</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3>All Receipts</h3>
+                            <button className="btn-secondary" onClick={handleExportFees}>Export Fee Report (Excel)</button>
+                        </div>
                         {!receipts.length && <p className="text-muted">No receipts found.</p>}
                         {receipts.length > 0 && (
                             <div className="table-container">

@@ -256,7 +256,7 @@ export default function TakeTest() {
                         {q.questionImage ? (
                             <div>
                                 <img
-                                    src={`${String(q.questionImage).startsWith('http') ? q.questionImage : `${import.meta.env.VITE_API_BASE || 'http://localhost:4000'}${q.questionImage}`}`}
+                                    src={`${String(q.questionImage).startsWith('http') ? q.questionImage : `${import.meta.env.VITE_API_BASE || 'http://localhost:4001'}${q.questionImage}`}`}
                                     alt={`Q${idx + 1}`}
                                     className="mcq-qimage"
                                 />

@@ -385,7 +385,7 @@ function ImagePicker({ value, onChange, label = 'Image (optional)' }) {
             </div>
             {preview ? (
                 <img
-                    src={`${String(preview).startsWith('http') ? preview : `${import.meta.env.VITE_API_BASE || 'http://localhost:4000'}${preview}`}`}
+                    src={`${String(preview).startsWith('http') ? preview : `${import.meta.env.VITE_API_BASE || 'http://localhost:4001'}${preview}`}`}
                     alt="preview"
                     style={{ marginTop: 12, maxWidth: '100%', height: 'auto', maxHeight: 220, objectFit: 'contain', borderRadius: 8, border: '1px solid var(--border)' }}
                 />

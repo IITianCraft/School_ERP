@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ParentLayout from '../../components/parent/ParentLayout'
 import { getAuth } from '../../utils/session'
-import { getAttendance, getReceiptsByStudent, getStudentBasic } from '../../api'
+import { getAttendance, getReceiptsByStudent, getStudentBasic, createRazorpayOrder, confirmPayment } from '../../api'
 
 export default function ParentAttendance() {
     const [linked, setLinked] = useState(null)
@@ -43,6 +43,73 @@ export default function ParentAttendance() {
         return rows.sort((a, b) => (a.date < b.date ? 1 : -1))
     }, [attendance, linked])
 
+    async function pay(term, amount) {
+        if (!linked) return
+        try {
+            const { token, username } = getAuth()
+            const cls = linked.class
+            const order = await createRazorpayOrder(amount, `fee_${cls}_${term}_${Date.now()}`, token)
+            const runtimeKey = import.meta.env.VITE_RAZORPAY_KEY || ''
+
+            async function loadRazorpaySdk() {
+                if (typeof window === 'undefined') return false
+                if (window.Razorpay) return true
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script')
+                    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+                    script.async = true
+                    script.onload = () => resolve(true)
+                    script.onerror = () => reject(new Error('Failed to load Razorpay SDK'))
+                    document.body.appendChild(script)
+                })
+            }
+
+            if (!runtimeKey) {
+                alert('Razorpay key is not configured.')
+                return
+            }
+
+            const options = {
+                key: runtimeKey,
+                amount: order.amount,
+                currency: order.currency,
+                name: 'ERP Fee Payment',
+                description: `Fee for Class ${cls} ${term}`,
+                order_id: order.id,
+                prefill: { name: student?.name || linked.name || username, email: student?.email || username },
+                handler: async function (response) {
+                    try {
+                        const payload = {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            studentId: linked.id,
+                            studentName: student?.name || linked.name || username,
+                            studentEmail: student?.email || username,
+                            class: cls,
+                            term,
+                            amount
+                        }
+                        await confirmPayment(payload, token)
+                        alert('Payment successful')
+                        const recs = await getReceiptsByStudent(linked.id, token)
+                        setReceipts(recs || [])
+                    } catch (err) { 
+                        console.error(err)
+                        alert('Payment confirmation failed') 
+                    }
+                }
+            }
+            await loadRazorpaySdk()
+            if (!window.Razorpay) { alert('Razorpay SDK not available.'); return }
+            const rzp = new window.Razorpay(options)
+            rzp.open()
+        } catch (e) {
+            console.error(e)
+            alert('Payment failed to start')
+        }
+    }
+
     return (
         <ParentLayout>
             <div className="parent-page">
@@ -80,7 +147,18 @@ export default function ParentAttendance() {
                                             return (
                                                 <div key={i} className="fee-row">
                                                     <div className="text-strong">{f.term || 'Fee'} — ₹{f.amount || 0}</div>
-                                                    <div className={paid ? 'status-present' : 'status-absent'}>{paid ? 'PAID' : 'UNPAID'}</div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                        <div className={paid ? 'status-present' : 'status-absent'}>{paid ? 'PAID' : 'UNPAID'}</div>
+                                                        {!paid && (
+                                                            <button 
+                                                                className="btn-primary" 
+                                                                onClick={() => pay(f.term || 'Fee', f.amount || 0)}
+                                                                style={{ padding: '4px 8px', fontSize: '0.85rem' }}
+                                                            >
+                                                                Pay ₹{f.amount || 0}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )
                                         })

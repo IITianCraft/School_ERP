@@ -87,7 +87,7 @@ if (!API_BASE) {
   // If running the Vite dev server (commonly on port 5173), default to backend on localhost:4000
   try {
     if (typeof window !== 'undefined' && window.location && String(window.location.port).includes('5173')) {
-      API_BASE = 'http://localhost:4000'
+      API_BASE = 'http://localhost:4001'
     }
   } catch (e) {
     API_BASE = ''
@@ -2041,5 +2041,182 @@ export async function updateContactQueryStatus(id, payload, token) {
     const err = await tryParseJson(res)
     throw new Error(err && err.message ? err.message : 'Failed to update contact query')
   }
+  return res.json()
+}
+
+// ===================== Front Office =====================
+export async function getFrontOfficeEntries(token) {
+  const res = await fetch(`${API_BASE}/api/front-office`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch front office') }
+  return res.json()
+}
+export async function createFrontOfficeEntry(payload, token) {
+  const res = await fetch(`${API_BASE}/api/front-office`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to create entry') }
+  return res.json()
+}
+
+// ===================== Admission Enquiry =====================
+export async function getAdmissionEnquiries(token) {
+  const res = await fetch(`${API_BASE}/api/admission-enquiry`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch admission enquiries') }
+  return res.json()
+}
+export async function createAdmissionEnquiry(payload, token) {
+  const res = await fetch(`${API_BASE}/api/admission-enquiry`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to create admission enquiry') }
+  return res.json()
+}
+export async function updateAdmissionEnquiry(id, payload, token) {
+  const res = await fetch(`${API_BASE}/api/admission-enquiry/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to update admission enquiry') }
+  return res.json()
+}
+
+// ===================== Online Admissions =====================
+export async function getOnlineAdmissions(token) {
+  const res = await fetch(`${API_BASE}/api/online-admission`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch online admissions') }
+  return res.json()
+}
+export async function submitOnlineAdmission(formData) {
+  const res = await fetch(`${API_BASE}/api/online-admission`, { method: 'POST', body: formData })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to submit online admission') }
+  return res.json()
+}
+
+// ===================== Discount Management =====================
+export async function getDiscounts(token) {
+  const res = await fetch(`${API_BASE}/api/discounts`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch discounts') }
+  return res.json()
+}
+export async function createDiscount(payload, token) {
+  const res = await fetch(`${API_BASE}/api/discounts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to create discount') }
+  return res.json()
+}
+export async function deleteDiscount(id, token) {
+  const res = await fetch(`${API_BASE}/api/discounts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to delete discount') }
+  return res.json()
+}
+
+// ===================== Library Management =====================
+export async function getLibraryBooks(token) {
+  const res = await fetch(`${API_BASE}/api/library/books`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch library books') }
+  return res.json()
+}
+export async function addLibraryBook(payload, token) {
+  const res = await fetch(`${API_BASE}/api/library/books`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to add book') }
+  return res.json()
+}
+export async function issueLibraryBook(id, studentId, token) {
+  const res = await fetch(`${API_BASE}/api/library/books/${id}/issue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ studentId }) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to issue book') }
+  return res.json()
+}
+export async function returnLibraryBook(id, studentId, token) {
+  const res = await fetch(`${API_BASE}/api/library/books/${id}/return`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ studentId }) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to return book') }
+  return res.json()
+}
+export async function deleteLibraryBook(id, token) {
+  const res = await fetch(`${API_BASE}/api/library/books/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to delete book') }
+  return res.json()
+}
+
+// ===================== Behavior Records =====================
+export async function getBehaviorRecords(studentId, token) {
+  const res = await fetch(`${API_BASE}/api/behavior-records/by-student/${studentId}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch behavior records') }
+  return res.json()
+}
+export async function addBehaviorRecord(payload, token) {
+  const res = await fetch(`${API_BASE}/api/behavior-records`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to add behavior record') }
+  return res.json()
+}
+
+// ===================== Lesson Plans =====================
+export async function getLessonPlans(query = {}, token) {
+  const qs = new URLSearchParams()
+  Object.keys(query).forEach(k => { if (query[k]) qs.set(k, query[k]) })
+  const res = await fetch(`${API_BASE}/api/faculty/lesson-plans?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch lesson plans') }
+  return res.json()
+}
+export async function addLessonPlan(payload, token) {
+  const res = await fetch(`${API_BASE}/api/faculty/lesson-plans`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to add lesson plan') }
+  return res.json()
+}
+
+
+// ===================== Excel Exports =====================
+export async function exportAttendanceExcel(query = {}, token) {
+  const qs = new URLSearchParams()
+  Object.keys(query).forEach(k => { if (query[k]) qs.set(k, query[k]) })
+  const res = await fetch(`${API_BASE}/api/export/attendance-excel?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to export attendance') }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+export async function exportFeesExcel(query = {}, token) {
+  const qs = new URLSearchParams()
+  Object.keys(query).forEach(k => { if (query[k]) qs.set(k, query[k]) })
+  const res = await fetch(`${API_BASE}/api/export/fees-excel?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to export fees') }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `fees_report_${new Date().toISOString().split('T')[0]}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+export async function exportMarksExcel(query = {}, token) {
+  const qs = new URLSearchParams()
+  Object.keys(query).forEach(k => { if (query[k]) qs.set(k, query[k]) })
+  const res = await fetch(`${API_BASE}/api/export/marks-excel?${qs.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to export marks') }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `marks_report_${new Date().toISOString().split('T')[0]}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+
+// ===================== Notification Settings =====================
+export async function getNotificationSettings(token) {
+  const res = await fetch(`${API_BASE}/api/notification-settings`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to fetch settings') }
+  return res.json()
+}
+
+export async function updateNotificationSettings(payload, token) {
+  const res = await fetch(`${API_BASE}/api/notification-settings`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload)
+  })
+  if (!res.ok) { const err = await tryParseJson(res); throw new Error(err.message || 'Failed to update settings') }
   return res.json()
 }

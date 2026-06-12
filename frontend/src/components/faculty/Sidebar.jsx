@@ -82,6 +82,14 @@ const menuItems = [
             { label: 'House Management', path: '/faculty/house-management' },
         ]
     },
+    {
+        title: 'Academics & Operations',
+        icon: <MdAssignment />,
+        subItems: [
+            { label: 'Behavior Records', path: '/faculty/behavior-records' },
+            { label: 'Lesson Plan', path: '/faculty/lesson-plan' },
+        ]
+    },
 ]
 
 export default function Sidebar({ isOpen, onClose }) {

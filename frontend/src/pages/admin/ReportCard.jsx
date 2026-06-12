@@ -4,7 +4,7 @@ import { getAuth } from '../../utils/session'
 import { createReportCard } from '../../api/reportCards'
 import { getStudents } from '../../api'
 import { getReportCards } from '../../api/reportCards'
-import { API_BASE } from '../../api'
+import { API_BASE, exportMarksExcel } from '../../api'
 
 export default function AdminReportCard() {
     const { token } = getAuth()
@@ -147,8 +147,17 @@ export default function AdminReportCard() {
         } catch (e) { alert(e.message || 'Failed to download') }
     }
 
+    async function handleExportMarks() {
+        try {
+            const { token } = getAuth()
+            await exportMarksExcel({ class: className, examName: examName }, token)
+        } catch (e) {
+            alert(e.message || 'Failed to export marks')
+        }
+    }
+
     return (
-        <AdminLayout title="Report Card">
+        <AdminLayout title="Report Card Generation">
             <div className="admin-page">
                 <header className="admin-page-header">
                     <h2>Generate Report Card</h2>
@@ -242,7 +251,10 @@ export default function AdminReportCard() {
                 </div>
 
                 <div className="admin-card">
-                    <h3>Report Card History</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                        <h3 style={{ margin: 0 }}>Report Card History</h3>
+                        <button className="btn-secondary" onClick={handleExportMarks}>Export Marks (Excel)</button>
+                    </div>
                     {loadingHistory ? <div className="info">Loading...</div> : (
                         <div className="table-container">
                             {history.length === 0 ? <div className="empty-state">No report cards generated yet.</div> : (

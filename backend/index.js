@@ -181,6 +181,12 @@ const StaffSalaryPayment = require('./models/StaffSalaryPayment')
 const IDCard = require('./models/IDCard')
 const HostelAllocation = require('./models/HostelAllocation')
 const Hostel = require('./models/Hostel')
+
+const FrontOffice = require('./models/FrontOffice')
+const AdmissionEnquiry = require('./models/AdmissionEnquiry')
+const OnlineAdmission = require('./models/OnlineAdmission')
+const Discount = require('./models/Discount')
+
 const { normalizeText, levenshtein, similarity, enhancedSimilarity } = require('./utils/similarity')
 const { users: demoUsers, findByUsername } = require('./users')
 const { verifyToken, requireRole } = require('./middleware/auth')
@@ -781,6 +787,17 @@ app.post('/api/reportcards', verifyToken, requireRole(['admin','faculty']), uplo
         doc.filePath = `/uploads/${fname}`
         doc.mime = 'application/pdf'
         await doc.save()
+        
+        try {
+          const s = await Student.findOne({ email: recipientEmail }).lean()
+          const phone = s ? s.contact : null
+          await notifyEvent({
+            event: 'exam_result',
+            phone,
+            message: `Report card generated for ${examName}. View on portal.`,
+            emailOpts: { to: recipientEmail, subject: `Report Card: ${examName}`, text: `Your report card for ${examName} is available.` }
+          })
+        } catch(e){}
       }
     } catch (e) {
       console.warn('Failed to generate report card PDF', e && e.message)
@@ -3309,7 +3326,12 @@ app.post('/api/attendance', verifyToken, requireRole(['faculty','admin']), async
             </div>
           `
           // fire and forget
-          sendMail({ to: s.email, subject, html }).catch(() => {})
+          notifyEvent({
+            event: 'attendance_marked',
+            phone: s.contact,
+            message: `Attendance update: ${statusWord} on ${titleDate} for ${classLabel}`,
+            emailOpts: { to: s.email, subject, html }
+          }).catch(() => {})
         }
       }
     } catch (mailErr) {
@@ -5230,6 +5252,16 @@ app.post('/api/finance/assign-fee', verifyToken, requireRole('admin'), async (re
     // Push assignedFees entry to matching students
     const r = await Student.updateMany(q, { $push: { assignedFees: entry } })
 
+    for (const student of students) {
+      if (student.contact || student.email) {
+        await notifyEvent({
+          event: 'fee_due',
+          phone: student.contact,
+          message: `Dear ${student.name}, a new fee for Term ${term} (Amount: ${amount}) has been assigned to your account.`,
+          emailOpts: { to: student.email, subject: 'Fee Due Notification', text: `Dear ${student.name}, a new fee for Term ${term} (Amount: ${amount}) has been assigned to your account.` }
+        });
+      }
+    }
     return res.json({ ok: true, matched: r.matchedCount || r.n || 0, modified: r.modifiedCount || r.nModified || 0, assigned: entry })
   } catch (e) { return res.status(500).json({ message: e.message }) }
 })
@@ -6430,7 +6462,11 @@ app.put('/api/leaves/:id/status', verifyToken, requireRole('admin'), async (req,
       if (to) {
         const subject = `Your leave request has been ${status}`
         const text = `Hello ${l.username || ''},\n\nYour leave request from ${l.from ? new Date(l.from).toLocaleDateString() : ''} to ${l.to ? new Date(l.to).toLocaleDateString() : ''} has been ${status}.\n\nNote from admin: ${l.reviewNote || 'No note provided.'}\n\nRegards, Admin`
-        await sendMail({ to, subject, text }).catch(() => {})
+        if (status === 'Approved') {
+          await notifyEvent({ event: 'leave_approved', phone: l.contact, message: text, emailOpts: { to, subject, text } }).catch(() => {})
+        } else {
+          await sendMail({ to, subject, text }).catch(() => {})
+        }
       }
     } catch (mailErr) {
       console.warn('Failed to notify student about leave status change:', mailErr && (mailErr.message || String(mailErr)))
@@ -6486,6 +6522,37 @@ app.post('/api/notices', verifyToken, requireRole('admin'), upload.single('file'
       studentSection: studentSection || undefined
     })
     try { sendSseEvent('notice_created', { id: doc._id, targets: doc.targets }) } catch (e) {}
+    
+    // Async notification logic
+    (async () => {
+      try {
+        let phoneTargets = [];
+        if (doc.targets.includes('all') || doc.targets.includes('student')) {
+          let q = {}
+          if (!doc.studentAll) {
+            if (doc.studentClass) q.class = doc.studentClass;
+            if (doc.studentSection) q.section = doc.studentSection;
+          }
+          const studs = await Student.find(q).lean();
+          studs.forEach(s => s.contact && phoneTargets.push({ phone: s.contact, email: s.email }));
+        }
+        if (doc.targets.includes('all') || doc.targets.includes('faculty')) {
+          const facs = await Faculty.find().lean();
+          facs.forEach(f => f.contact && phoneTargets.push({ phone: f.contact, email: f.email }));
+        }
+        for (const t of phoneTargets) {
+          await notifyEvent({
+            event: 'new_notice',
+            phone: t.phone,
+            message: `New Notice: ${doc.title}. Please check the ERP portal.`,
+            emailOpts: { to: t.email, subject: `Notice: ${doc.title}`, text: `New Notice: ${doc.title}\n\n${doc.body}` }
+          }).catch(()=>{})
+        }
+      } catch (e) {
+        console.warn('Failed to notify for new notice', e.message);
+      }
+    })();
+    
     return res.status(201).json(doc)
   } catch (e) { return res.status(500).json({ message: e.message }) }
 })
@@ -8336,7 +8403,15 @@ app.put('/api/leaves/:id/status', verifyToken, requireRole('admin'), async (req,
       if (recipient) {
         const subject = `Leave ${status}: ${leave.username}`
         const text = `Your leave request from ${leave.from.toISOString().slice(0,10)} to ${leave.to.toISOString().slice(0,10)} has been ${status}.\n\nNote from reviewer: ${note || ''}`
-        await sendMail({ to: recipient, subject, text })
+        
+        let phone = null;
+        if (u && u.contact) phone = u.contact;
+        
+        if (status === 'Approved' && phone) {
+           await notifyEvent({ event: 'leave_approved', phone, message: text, emailOpts: { to: recipient, subject, text } }).catch(() => {})
+        } else {
+           await sendMail({ to: recipient, subject, text })
+        }
       } else {
         console.log('No email found for leave user, skipping email')
       }
@@ -9101,6 +9176,100 @@ app.get('*', (req, res, next) => {
   return res.status(404).json({ message: 'Not found' })
 })
 
+
+// ===================== Front Office APIs =====================
+app.post('/api/front-office', verifyToken, requireRole(['admin', 'faculty', 'staff']), async (req, res) => {
+  try {
+    const payload = req.body || {}
+    payload.createdBy = req.user && req.user.sub
+    const doc = await FrontOffice.create(payload)
+    return res.status(201).json(doc)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+app.get('/api/front-office', verifyToken, requireRole(['admin', 'faculty', 'staff']), async (req, res) => {
+  try {
+    const list = await FrontOffice.find({}).sort({ createdAt: -1 }).lean().catch(() => [])
+    return res.json(list)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+
+// ===================== Admission Enquiry APIs =====================
+app.post('/api/admission-enquiry', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const payload = req.body || {}
+    payload.createdBy = req.user && req.user.sub
+    const doc = await AdmissionEnquiry.create(payload)
+    return res.status(201).json(doc)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+app.get('/api/admission-enquiry', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const list = await AdmissionEnquiry.find({}).sort({ createdAt: -1 }).lean().catch(() => [])
+    return res.json(list)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+app.patch('/api/admission-enquiry/:id', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const id = req.params.id
+    const payload = req.body || {}
+    const allowed = ['status', 'notes']
+    const update = {}
+    for (const k of allowed) { if (payload[k] !== undefined) update[k] = payload[k] }
+    const doc = await AdmissionEnquiry.findByIdAndUpdate(id, update, { new: true }).lean().catch(() => null)
+    if (!doc) return res.status(404).json({ message: 'not found' })
+    return res.json(doc)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+
+// ===================== Online Admission APIs =====================
+app.post('/api/online-admission', upload.single('document'), async (req, res) => {
+  try {
+    const payload = req.body || {}
+    const required = ['studentName', 'dob', 'gender', 'address', 'parentName', 'parentPhone', 'classApplying']
+    for (const k of required) { if (!payload[k]) return res.status(400).json({ message: `${k} required` }) }
+    const file = req.file
+    const filePath = file ? `/uploads/${file.filename}` : ''
+    const doc = await OnlineAdmission.create({
+      ...payload,
+      documentPath: filePath
+    })
+    return res.status(201).json(doc)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+app.get('/api/online-admission', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const list = await OnlineAdmission.find({}).sort({ createdAt: -1 }).lean().catch(() => [])
+    return res.json(list)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+
+// ===================== Discount Management APIs =====================
+app.post('/api/discounts', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const payload = req.body || {}
+    payload.appliedBy = req.user && req.user.sub
+    if (!payload.studentId || !payload.type || payload.amount === undefined || !payload.term) {
+      return res.status(400).json({ message: 'studentId, type, amount, term required' })
+    }
+    const doc = await Discount.create(payload)
+    return res.status(201).json(doc)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+app.get('/api/discounts', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const list = await Discount.find({}).sort({ createdAt: -1 }).lean().catch(() => [])
+    return res.json(list)
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+app.delete('/api/discounts/:id', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const id = req.params.id
+    const doc = await Discount.findByIdAndDelete(id).catch(() => null)
+    if (!doc) return res.status(404).json({ message: 'not found' })
+    return res.json({ ok: true })
+  } catch (e) { return res.status(500).json({ message: e.message }) }
+})
+
 const server = app.listen(PORT, () => {
   console.log(`ERP backend listening on http://localhost:${PORT}`)
 });
@@ -9191,6 +9360,215 @@ app.get('/api/attendance/faculty/export', verifyToken, async (req, res) => {
     return res.send(csv)
   } catch (e) { return res.status(500).json({ message: e.message }) }
 })
+
+
+// ===================== Excel Export APIs =====================
+app.get('/api/export/attendance-excel', verifyToken, requireRole(['admin','faculty']), async (req, res) => {
+  try {
+    const { class: cls, section, from, to } = req.query || {};
+    const q = {};
+    if (cls) q.class = String(cls);
+    if (section) q.section = String(section);
+    if (from || to) {
+      q.date = {};
+      if (from) q.date.$gte = String(from);
+      if (to) q.date.$lte = String(to);
+    }
+    const items = await Attendance.find(q).sort({ date: 1 }).lean();
+    const rows = items.map(i => ({
+      Date: i.date,
+      Class: i.class,
+      Section: i.section || '',
+      'Student ID': i.studentId,
+      Status: i.status
+    }));
+    
+    const xlsx = require('xlsx');
+    const ws = xlsx.utils.json_to_sheet(rows.length ? rows : [{ Message: 'No data' }]);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Attendance');
+    const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="attendance_report.xlsx"');
+    res.send(buf);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+app.get('/api/export/fees-excel', verifyToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { class: cls, term, status } = req.query || {};
+    const q = {};
+    // Depending on schema, we might filter receipts or students. We'll filter students for a comprehensive fee report.
+    if (cls) q.class = String(cls);
+    const students = await Student.find(q).lean();
+    
+    let rows = [];
+    for (const st of students) {
+      const fees = st.assignedFees || [];
+      for (const fee of fees) {
+        if (term && fee.term !== term) continue;
+        const paidReceipts = await Receipt.countDocuments({ studentEmail: st.email, term: fee.term });
+        const currentStatus = paidReceipts > 0 ? 'Paid' : 'Unpaid';
+        if (status && currentStatus.toLowerCase() !== status.toLowerCase()) continue;
+        
+        rows.push({
+          'Student Name': st.name,
+          'Class': st.class,
+          'Roll No': st.rollNo || '',
+          'Term': fee.term,
+          'Amount': fee.amount,
+          'Status': currentStatus
+        });
+      }
+    }
+    
+    const xlsx = require('xlsx');
+    const ws = xlsx.utils.json_to_sheet(rows.length ? rows : [{ Message: 'No data' }]);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Fees');
+    const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="fees_report.xlsx"');
+    res.send(buf);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+app.get('/api/export/marks-excel', verifyToken, requireRole(['admin','faculty']), async (req, res) => {
+  try {
+    const { class: cls, examName } = req.query || {};
+    const q = {};
+    if (cls) q.class = String(cls);
+    if (examName) q.examName = String(examName);
+    
+    const items = await Mark.find(q).sort({ studentId: 1 }).lean();
+    const rows = items.map(i => ({
+      'Student ID': i.studentId,
+      'Class': i.class,
+      'Exam': i.examName,
+      'Subject': i.subject,
+      'Marks Obtained': i.marksObtained,
+      'Max Marks': i.maxMarks,
+      'Grade': i.grade || ''
+    }));
+    
+    const xlsx = require('xlsx');
+    const ws = xlsx.utils.json_to_sheet(rows.length ? rows : [{ Message: 'No data' }]);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Marks');
+    const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="marks_report.xlsx"');
+    res.send(buf);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+
+// ===================== Twilio Notifications =====================
+const twilio = require('twilio');
+const NotificationSettings = require('./models/NotificationSettings');
+
+let twilioClient;
+if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+  try {
+    twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    console.log('Twilio client initialized');
+  } catch(e) {
+    console.error('Failed to init twilio:', e.message);
+  }
+}
+
+async function sendSMS(to, message) {
+  if (!twilioClient || !to) return;
+  try {
+    // Format phone number to start with + if not already (assume India +91 for simplicity if 10 digits)
+    let formattedTo = to.replace(/\D/g, '');
+    if (formattedTo.length === 10) formattedTo = '+91' + formattedTo;
+    else if (!formattedTo.startsWith('+')) formattedTo = '+' + formattedTo;
+    
+    await twilioClient.messages.create({
+      body: message,
+      from: process.env.TWILIO_PHONE,
+      to: formattedTo
+    });
+    console.log('SMS sent to', formattedTo);
+  } catch (err) {
+    console.error('Twilio SMS Error:', err.message);
+  }
+}
+
+async function sendWhatsApp(to, message) {
+  if (!twilioClient || !to) return;
+  try {
+    let formattedTo = to.replace(/\D/g, '');
+    if (formattedTo.length === 10) formattedTo = '+91' + formattedTo;
+    else if (!formattedTo.startsWith('+')) formattedTo = '+' + formattedTo;
+
+    await twilioClient.messages.create({
+      body: message,
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+      to: `whatsapp:${formattedTo}`
+    });
+    console.log('WhatsApp sent to', formattedTo);
+  } catch (err) {
+    console.error('Twilio WhatsApp Error:', err.message);
+  }
+}
+
+async function notifyEvent({ event, emailOpts, phone, message }) {
+  try {
+    const config = await NotificationSettings.findOne({ event }).lean();
+    if (!config) return; // if no config exists, we don't send SMS/WA (emails are handled by legacy logic if any)
+
+    if (config.sms && phone) {
+      await sendSMS(phone, message);
+    }
+    if (config.whatsapp && phone) {
+      await sendWhatsApp(phone, message);
+    }
+    // Note: If config.email is true, the legacy email should have been sent already in the handler or we can send it here.
+    // For safety, we will let existing code handle email or we can optionally send it here if emailOpts is passed.
+    if (config.email && emailOpts && emailOpts.to) {
+       // Only send if not already sent by legacy code. We'll pass emailOpts when we want this helper to send it.
+       await sendMail(emailOpts).catch(()=>{});
+    }
+  } catch(e) {
+    console.error('notifyEvent error:', e.message);
+  }
+}
+
+app.get('/api/notification-settings', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const settings = await NotificationSettings.find().lean();
+    res.json(settings);
+  } catch(e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+app.patch('/api/notification-settings', verifyToken, requireRole('admin'), async (req, res) => {
+  try {
+    const items = req.body; // array of { event, email, sms, whatsapp }
+    for (const item of items) {
+      await NotificationSettings.findOneAndUpdate(
+        { event: item.event },
+        { email: item.email, sms: item.sms, whatsapp: item.whatsapp },
+        { upsert: true, new: true }
+      );
+    }
+    res.json({ success: true });
+  } catch(e) {
+    res.status(500).json({ message: e.message });
+  }
+});
 
 // Global error handling middleware (must be registered after all routes)
 app.use((err, req, res, next) => {

@@ -104,6 +104,8 @@ const menuItems = [
         subItems: [
             { label: 'Meeting', path: '/admin/meeting' },
             { label: 'Notices', path: '/admin/notices' },
+            { label: 'Notifications', path: '/admin/notifications' },
+            { label: 'Notification Settings', path: '/admin/notification-settings' },
             { label: 'Complaints', path: '/admin/complaints' },
         ]
     },
@@ -122,6 +124,14 @@ const menuItems = [
             { label: 'Form', path: '/admin/form' },
             { label: 'Forms Query', path: '/admin/form-queries' },
             { label: 'Contact Page Query', path: '/admin/contact-queries' },
+        ]
+    },
+    {
+        title: 'Other Operations',
+        icon: <MdAssignment />,
+        subItems: [
+            { label: 'Library', path: '/admin/library-management' },
+            { label: 'Behavior Records', path: '/admin/behavior-records' },
         ]
     },
 ]

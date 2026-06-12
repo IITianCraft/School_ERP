@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import '../../pages/AdminPanel.css'
-import { getStaffList, postStaffAttendance } from '../../api'
+import { getStaffList, postStaffAttendance, exportAttendanceExcel } from '../../api'
 import { getAuth } from '../../utils/session'
 
 export default function StaffAttendanceAdmin() {
@@ -43,6 +43,15 @@ export default function StaffAttendanceAdmin() {
         setLoading(false)
     }
 
+    async function handleExport() {
+        try {
+            const { token } = getAuth()
+            await exportAttendanceExcel({ from: date, to: date }, token)
+        } catch (e) {
+            setMessage(e.message || 'Failed to export excel')
+        }
+    }
+
     return (
         <AdminLayout title="Staff Attendance">
             <div className="admin-page">
@@ -51,12 +60,13 @@ export default function StaffAttendanceAdmin() {
                 </header>
 
                 <div className="admin-card">
-                    <div className="admin-form-grid" style={{ gridTemplateColumns: 'minmax(200px, 300px) auto' }}>
+                    <div className="admin-form-grid" style={{ gridTemplateColumns: 'minmax(200px, 300px) auto auto' }}>
                         <div className="form-group">
                             <label>Date</label>
                             <input type="date" className="admin-input" value={date} onChange={e => setDate(e.target.value)} />
                         </div>
                         <button className="btn-primary" onClick={save} disabled={loading} style={{ alignSelf: 'end' }}>{loading ? 'Saving...' : 'Save Attendance'}</button>
+                        <button className="btn-secondary" onClick={handleExport} style={{ alignSelf: 'end' }}>Export Excel</button>
                     </div>
                     {message && <div style={{ marginTop: 16, padding: '10px', borderRadius: 'var(--radius-md)', background: message.includes('Failed') ? 'var(--danger-color)' : 'var(--primary-color)', color: '#fff', opacity: 0.9 }}>{message}</div>}
                 </div>
