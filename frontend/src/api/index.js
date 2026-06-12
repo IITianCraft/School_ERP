@@ -86,7 +86,10 @@ let API_BASE = import.meta.env.VITE_API_BASE || ''
 
 // Prevent localhost API base in production (when hosted on Vercel/etc.)
 if (typeof window !== 'undefined' && window.location && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && API_BASE.includes('localhost')) {
-  API_BASE = '' // Fall back to relative path in production if env var is accidentally localhost
+  API_BASE = 'https://school-erp-backend-nhqd.onrender.com' // Fall back to production backend URL
+} else if (!API_BASE && typeof window !== 'undefined' && window.location && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  // If API_BASE is empty in production, point to the Render backend
+  API_BASE = 'https://school-erp-backend-nhqd.onrender.com'
 }
 
 if (!API_BASE) {
