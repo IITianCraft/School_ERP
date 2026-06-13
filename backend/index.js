@@ -250,17 +250,22 @@ let corsOptions = undefined
       origin: function (origin, cb) {
         // allow requests with no origin (curl, mobile apps, server-to-server)
         if (!origin) return cb(null, true)
+        
+        // If strict origins are not configured, allow all to prevent breaking Vercel deployments
+        if (!allowedEnv) return cb(null, true)
+
         try {
           const norm = String(origin || '').replace(/\/+$/, '')
           if (normalizedOrigins.indexOf(norm) !== -1) return cb(null, true)
         } catch (e) {
           // fallthrough to deny
         }
-        return cb(new Error('Not allowed by CORS'))
+        console.warn(`CORS: Denying request from unconfigured origin: ${origin}`)
+        return cb(null, false) // Return false instead of Error to prevent 500 Internal Server Error
       },
       credentials: true,
     }
-    console.log('CORS: allowed origins:', normalizedOrigins.join(', '))
+    console.log('CORS: strict origins mode enabled:', normalizedOrigins.join(', '))
   }
 }
 app.use(cors(corsOptions))
